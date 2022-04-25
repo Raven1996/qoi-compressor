@@ -42,8 +42,8 @@ extern "C" {
 
 typedef struct {
 	float weights[4];
-	float lowthresh;
-	float highthresh;
+	float lothresh;
+	float hithresh;
 	int mulalpha;
 } qoi_cpr_cfg;
 
@@ -147,11 +147,11 @@ void *qoi_cpr_encode(const void *data, const qoi_desc *desc, const qoi_cpr_cfg *
 	QOI_ZEROARR(index);
 
 	run = 0;
-	px_prev.rgba.r = 0;
-	px_prev.rgba.g = 0;
-	px_prev.rgba.b = 0;
-	px_prev.rgba.a = 255;
-	px_stored = px = px_prev;
+	px.rgba.r = 0;
+	px.rgba.g = 0;
+	px.rgba.b = 0;
+	px.rgba.a = 255;
+	px_stored = px;
 	px_next.rgba.r = pixels[0];
 	px_next.rgba.g = pixels[1];
 	px_next.rgba.b = pixels[2];
@@ -169,6 +169,8 @@ void *qoi_cpr_encode(const void *data, const qoi_desc *desc, const qoi_cpr_cfg *
 	for (px_pos = 0; px_pos < px_len; px_pos += channels) {
 		px_prev = px;
 		px = px_next;
+
+		if (cfg->mulalpha && !px.rgba.a) { px.v = 0; }
 
 		if (px_pos + channels < px_len) {
 			px_next.rgba.r = pixels[px_pos + channels + 0];
@@ -191,11 +193,11 @@ void *qoi_cpr_encode(const void *data, const qoi_desc *desc, const qoi_cpr_cfg *
 
 		float contrast = QOI_CPR_MIN(diff_prev[0], diff_next[0]) / 765.f;
 		if (cfg->mulalpha) contrast *= px.rgba.a / 255.f;
-		local_thresh[0] = (cfg->lowthresh * (1 - contrast) + cfg->highthresh * contrast) * 3; /* 3 channels */
+		local_thresh[0] = (cfg->lothresh * (1 - contrast) + cfg->hithresh * contrast) * 3; /* 3 channels */
 		diff_prev[0] = diff_next[0];
 
 		contrast = QOI_CPR_MIN(diff_prev[1], diff_next[1]) / 255.f;
-		local_thresh[1] = cfg->lowthresh * (1 - contrast) + cfg->highthresh * contrast;
+		local_thresh[1] = cfg->lothresh * (1 - contrast) + cfg->hithresh * contrast;
 		diff_prev[1] = diff_next[1];
 
 		if (compare_color(px, px_stored, local_thresh, cfg, NULL)) {
