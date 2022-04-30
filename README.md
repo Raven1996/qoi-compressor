@@ -1,21 +1,17 @@
-![QOI Logo](https://qoiformat.org/qoi-logo.svg)
-
 # "Lossy" QOI compressor - The “Quite OK Image Format” lossy image compression
 
 Single-file MIT licensed library for C/C++
 
 Original repository https://github.com/phoboslab/qoi
 
-More info at https://qoiformat.org
-
 ## Example Usage
 
 - [qoiconv_cpr.c](https://github.com/Raven1996/qoi-compressor/blob/master/qoiconv_cpr.c)
 converts between png/jpeg <> (lossy) qoi
 
-The default setting is suitable for most pictures. Use `--mulalpha` when you 
-don't care translucent quality. For JPEG, raising `--hithresh` and reducing 
-`--lothresh` may tolerant some JPEG artifacts as keep the color clean.
+The default setting is suitable for most pictures. Use `-mul` when you care less
+about translucent quality. Raising `-hi` may tolerant some JPEG artifacts. Try 
+raising `-lo` when image has base noise.
 
 ## Limitations
 
@@ -29,5 +25,5 @@ larger than that. This is not a streaming en-/decoder. It loads the whole image
 file into RAM before doing any work and is not extensively optimized for 
 performance (but it's still very fast).
 
-The "lossy" QOI compressor does not tend to compress at a high speed. Please use
-with care.
+The "lossy" QOI compressor does not intend to compress at a high speed. Please 
+use with care.

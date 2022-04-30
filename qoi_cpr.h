@@ -117,8 +117,9 @@ void *qoi_cpr_encode(const void *data, const qoi_desc *desc, const qoi_cpr_cfg *
 	unsigned char *bytes;
 	const unsigned char *pixels;
 	qoi_rgba_t index[64];
+	unsigned long long mask;
 	qoi_rgba_t px, px_prev, px_next, px_stored, px_potential;
-	float alpha;
+	float alpha, diff_sum;
 
 	if (
 		data == NULL || out_len == NULL || desc == NULL ||
@@ -150,22 +151,21 @@ void *qoi_cpr_encode(const void *data, const qoi_desc *desc, const qoi_cpr_cfg *
 	pixels = (const unsigned char *)data;
 
 	QOI_ZEROARR(index);
+	mask = (unsigned long long)1;
 
 	run = 0;
-	px.rgba.r = 0;
-	px.rgba.g = 0;
-	px.rgba.b = 0;
-	px.rgba.a = 255;
-	px_stored = px;
+	px_stored.v = px.v = 0xff000000; /* {0, 0, 0, 255} */
 	px_next.rgba.r = pixels[0];
 	px_next.rgba.g = pixels[1];
 	px_next.rgba.b = pixels[2];
-	px_next.rgba.a = channels == 4 ? pixels[3] : 255;
+	px_next.rgba.a = desc->channels == 4 ? pixels[3] : 255;
 
-	diff_prev[0] = abs(px_next.rgba.r - px.rgba.r)
-			+ abs(px_next.rgba.g - px.rgba.g)
-			+ abs(px_next.rgba.b - px.rgba.b);
+	diff_prev[0] = abs(px_next.rgba.r - px.rgba.r) * cfg->weights[0]
+		+ abs(px_next.rgba.g - px.rgba.g) * cfg->weights[1]
+		+ abs(px_next.rgba.b - px.rgba.b) * cfg->weights[2];
 	diff_prev[1] = abs(px_next.rgba.a - px.rgba.a);
+	diff_sum = (cfg->weights[0] + cfg->weights[1] + cfg->weights[2]) * 255.f;
+	if (!diff_sum) diff_sum = 1.f;
 
 	px_len = desc->width * desc->height * desc->channels;
 	px_end = px_len - desc->channels;
@@ -174,7 +174,7 @@ void *qoi_cpr_encode(const void *data, const qoi_desc *desc, const qoi_cpr_cfg *
 	for (px_pos = 0; px_pos < px_len; px_pos += channels) {
 		px_prev = px;
 		px = px_next;
-		alpha = 1.0f;
+		alpha = 1.f;
 
 		if (cfg->mulalpha) {
 			px.v = px.rgba.a ? px.v : 0;
@@ -194,12 +194,12 @@ void *qoi_cpr_encode(const void *data, const qoi_desc *desc, const qoi_cpr_cfg *
 			px_next = px_prev; /* Keep maximum contrast */
 		}
 
-		diff_next[0] = abs(px_next.rgba.r - px.rgba.r)
-			+ abs(px_next.rgba.g - px.rgba.g)
-			+ abs(px_next.rgba.b - px.rgba.b);
+		diff_next[0] = abs(px_next.rgba.r - px.rgba.r) * cfg->weights[0]
+			+ abs(px_next.rgba.g - px.rgba.g) * cfg->weights[1]
+			+ abs(px_next.rgba.b - px.rgba.b) * cfg->weights[2];
 		diff_next[1] = abs(px_next.rgba.a - px.rgba.a);
 
-		float contrast = QOI_CPR_MIN(diff_prev[0], diff_next[0]) / 765.f * alpha;
+		float contrast = QOI_CPR_MIN(diff_prev[0], diff_next[0]) / diff_sum * alpha;
 		local_thresh[0] = cfg->lothresh * (1 - contrast) + cfg->hithresh * contrast;
 		diff_prev[0] = diff_next[0];
 
@@ -224,21 +224,27 @@ void *qoi_cpr_encode(const void *data, const qoi_desc *desc, const qoi_cpr_cfg *
 
 			index_pos = QOI_COLOR_HASH(px) % 64;
 
-			if (index[index_pos].v != px.v) {
-				float score_min = QOI_CPR_MAXFLOAT;
-				float score;
+			if (index[index_pos].v == px.v) {
+				bytes[p++] = QOI_OP_INDEX | index_pos;
+				px_stored = index[index_pos];
+				continue;
+			}
 
-				index_pos = -1;
+			float score_min = QOI_CPR_MAXFLOAT;
+			float score;
 
-				for (i = 0; i < 64; i++) {
-					if (
-						// QOI_COLOR_HASH(index[i]) % 64 == i && /* Make sure color is valid, but this step is not necessary*/
-						compare_color(px, alpha, index[i], local_thresh, cfg, &score) &&
-						score < score_min
-					) {
-						score_min = score;
-						index_pos = i;
-					}
+			index_pos = -1;
+
+			for (i = 0; i < 64; i++) {
+				if (
+					/* Make sure color is valid
+					The behavior to update the index of invalid color is undefined */
+					(mask & ((unsigned long long)1 << i)) &&
+					compare_color(px, alpha, index[i], local_thresh, cfg, &score) &&
+					score < score_min
+				) {
+					score_min = score;
+					index_pos = i;
 				}
 			}
 
@@ -251,9 +257,6 @@ void *qoi_cpr_encode(const void *data, const qoi_desc *desc, const qoi_cpr_cfg *
 					signed char vr = px.rgba.r - px_stored.rgba.r;
 					signed char vg = px.rgba.g - px_stored.rgba.g;
 					signed char vb = px.rgba.b - px_stored.rgba.b;
-
-					signed char vg_r = vr - vg;
-					signed char vg_b = vb - vg;
 
 					signed char _vr = QOI_CPR_CLAMP(vr, -2, 1);
 					signed char _vg = QOI_CPR_CLAMP(vg, -2, 1);
@@ -272,36 +275,37 @@ void *qoi_cpr_encode(const void *data, const qoi_desc *desc, const qoi_cpr_cfg *
 					}
 					else {
 						_vg = QOI_CPR_CLAMP(vg, -32, 31);
-						signed char _vg_r = QOI_CPR_CLAMP(vg_r, -8, 7);
-						signed char _vg_b = QOI_CPR_CLAMP(vg_b, -8, 7);
+						signed char vg_r = vr - _vg;
+						signed char vg_b = vb - _vg;
+						vg_r = QOI_CPR_CLAMP(vg_r, -8, 7);
+						vg_b = QOI_CPR_CLAMP(vg_b, -8, 7);
 
-						px_stored.rgba.r += _vg + _vg_r;
+						px_stored.rgba.r += _vg + vg_r;
 						px_stored.rgba.g += _vg;
-						px_stored.rgba.b += _vg + _vg_b;
+						px_stored.rgba.b += _vg + vg_b;
 
-						if (px.v == px_stored.v ||compare_color(px, alpha, px_stored, local_thresh, cfg, NULL)) {
-							bytes[p++] = QOI_OP_LUMA      | (_vg   + 32);
-							bytes[p++] = (_vg_r + 8) << 4 | (_vg_b +  8);
+						if (px.v == px_stored.v || compare_color(px, alpha, px_stored, local_thresh, cfg, NULL)) {
+							bytes[p++] = QOI_OP_LUMA     | (_vg  + 32);
+							bytes[p++] = (vg_r + 8) << 4 | (vg_b +  8);
 						}
 						else {
 							bytes[p++] = QOI_OP_RGB;
-							px_stored.rgba.r = bytes[p++] = px.rgba.r;
-							px_stored.rgba.g = bytes[p++] = px.rgba.g;
-							px_stored.rgba.b = bytes[p++] = px.rgba.b;
+							px_stored = *(qoi_rgba_t *)(bytes + p) = px;
+							p += 3;
+							px_stored.rgba.a = px_potential.rgba.a;
 						}
 					}
 				}
 				else {
 					bytes[p++] = QOI_OP_RGBA;
-					bytes[p++] = px.rgba.r;
-					bytes[p++] = px.rgba.g;
-					bytes[p++] = px.rgba.b;
-					bytes[p++] = px.rgba.a;
+					*(qoi_rgba_t *)(bytes + p) = px;
+					p += 4;
 					px_stored = px;
 				}
 
 				index_pos = QOI_COLOR_HASH(px_stored) % 64;
 				index[index_pos] = px_stored;
+				mask |= (unsigned long long)1 << index_pos;
 			}
 		}
 	}

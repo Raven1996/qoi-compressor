@@ -53,11 +53,11 @@ int main(int argc, char **argv) {
 	if (argc < 3) {
 		printf("Usage: qoiconv_cpr <infile> <outfile> [options]\n");
 		printf("Options:\n");
-		printf("  --weights ...... RGBA channel weights (in percentage, default 60 100 40 100).\n");
-		printf("  --lothresh ..... low contrast threshhold (default 0.8)\n");
-		printf("  --hithresh ..... high contrast threshhold (default 48)\n");
-		printf("  --mulalpha ..... multiply alpha before comparison (default unmultiply)\n");
-		printf("  --quality ...... jpeg encode quality (default 95)\n");
+		printf("  -w ..... RGBA channel weights (in percentage, default 60 100 40 100).\n");
+		printf("  -lo .... low contrast threshhold (default 0.6)\n");
+		printf("  -hi .... high contrast threshhold (default 48)\n");
+		printf("  -mul ... multiply alpha before comparison (default unmultiply)\n");
+		printf("  -q ..... jpeg encode quality (default 95)\n");
 		printf("Examples\n");
 		printf("  qoiconv_cpr input.png output.qoi --weights 60 100 40 75 --lowthresh 0.5 --highthresh 24 --mulalpha\n");
 		printf("  qoiconv_cpr input.qoi output.png\n");
@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
 
 	qoi_cpr_cfg config = {
 		.weights = {0.6f, 1.f, 0.4f, 1.f},
-		.lothresh = 0.8f, 
+		.lothresh = 0.6f, 
 		.hithresh = 48.f,
 		.mulalpha = 0
 	};
@@ -79,24 +79,24 @@ int main(int argc, char **argv) {
 
 	int i = 3;
 	while (i < argc) {
-		if (strcmp(argv[i], "--weights") == 0) {
-			if (i + 4 >= argc) { printf("Not enough weights args\n"); exit(1); }
+		if (strcmp(argv[i], "-w") == 0) {
+			if (i + 4 >= argc) { printf("Not enough -w args\n"); exit(1); }
 			config.weights[0] = atof(argv[++i]) / 100.f;
 			config.weights[1] = atof(argv[++i]) / 100.f;
 			config.weights[2] = atof(argv[++i]) / 100.f;
 			config.weights[3] = atof(argv[++i]) / 100.f;
 		}
-		else if (strcmp(argv[i], "--lothresh") == 0) {
-			if (i + 1 >= argc) { printf("Missing lothresh arg\n"); exit(1); }
+		else if (strcmp(argv[i], "-lo") == 0) {
+			if (i + 1 >= argc) { printf("Missing -lo arg\n"); exit(1); }
 			config.lothresh = atof(argv[++i]);
 		}
-		else if (strcmp(argv[i], "--hithresh") == 0) {
-			if (i + 1 >= argc) { printf("Missing hithresh arg\n"); exit(1); }
+		else if (strcmp(argv[i], "-hi") == 0) {
+			if (i + 1 >= argc) { printf("Missing -hi arg\n"); exit(1); }
 			config.hithresh = atof(argv[++i]);
 		}
-		else if (strcmp(argv[i], "--mulalpha") == 0) { config.mulalpha = 1; }
-		else if (strcmp(argv[i], "--quality") == 0) {
-			if (i + 1 >= argc) { printf("Missing quality arg\n"); exit(1); }
+		else if (strcmp(argv[i], "-mul") == 0) { config.mulalpha = 1; }
+		else if (strcmp(argv[i], "-q") == 0) {
+			if (i + 1 >= argc) { printf("Missing -q arg\n"); exit(1); }
 			quality = atoi(argv[++i]);
 		}
 		else { printf("Unknown option %s\n", argv[i]); exit(1); }
